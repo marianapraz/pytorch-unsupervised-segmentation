@@ -29,40 +29,18 @@ parser.add_argument('--num_superpixels', metavar='K', default=10000, type=int,
                     help='number of superpixels')
 parser.add_argument('--compactness', metavar='C', default=100, type=float, 
                     help='compactness of superpixels')
-parser.add_argument('--visualize', metavar='1 or 0', default=1, type=int, 
+parser.add_argument('--visualize', metavar='1 or 0', default=0, type=int, 
                     help='visualization flag')
 parser.add_argument('--input', metavar='FILENAME',
                     help='input image file name', required=True)
 args = parser.parse_args()
 
-# CNN model
-class MyNet(nn.Module):
-    def __init__(self,input_dim):
-        super(MyNet, self).__init__()
-        self.conv1 = nn.Conv2d(input_dim, args.nChannel, kernel_size=3, stride=1, padding=1 )
-        self.bn1 = nn.BatchNorm2d(args.nChannel)
-        self.conv2 = nn.ModuleList()
-        self.bn2 = nn.ModuleList()
-        for i in range(args.nConv-1):
-            self.conv2.append( nn.Conv2d(args.nChannel, args.nChannel, kernel_size=3, stride=1, padding=1 ) )
-            self.bn2.append( nn.BatchNorm2d(args.nChannel) )
-        self.conv3 = nn.Conv2d(args.nChannel, args.nChannel, kernel_size=1, stride=1, padding=0 )
-        self.bn3 = nn.BatchNorm2d(args.nChannel)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = F.relu( x )
-        x = self.bn1(x)
-        for i in range(args.nConv-1):
-            x = self.conv2[i](x)
-            x = F.relu( x )
-            x = self.bn2[i](x)
-        x = self.conv3(x)
-        x = self.bn3(x)
-        return x
 
 # load image
 im = cv2.imread(args.input)
+im = cv2.resize(im,(224,224))
+
 data = torch.from_numpy( np.array([im.transpose( (2, 0, 1) ).astype('float32')/255.]) )
 if use_cuda:
     data = data.cuda()
@@ -77,7 +55,9 @@ for i in range(len(u_labels)):
     l_inds.append( np.where( labels == u_labels[ i ] )[ 0 ] )
 
 # train
-model = MyNet( data.size(1) )
+from model import MyNet
+
+model = MyNet( data.size(1), args.nChannel, args.nConv )
 if use_cuda:
     model.cuda()
 model.train()
@@ -131,3 +111,7 @@ if not args.visualize:
     im_target_rgb = np.array([label_colours[ c % 100 ] for c in im_target])
     im_target_rgb = im_target_rgb.reshape( im.shape ).astype( np.uint8 )
 cv2.imwrite( "output.png", im_target_rgb )
+
+
+# Save model weights
+torch.save(model.state_dict(),'unsupervised_weights.pth')
